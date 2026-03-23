@@ -22,7 +22,9 @@ def load_secure_data():
         ]
         
         # Authenticate using your local bot key
-        creds = Credentials.from_service_account_file('creds.json', scopes=scopes)
+        import json
+creds_dict = json.loads(st.secrets["gcp_service_account_json"])
+creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
         # Open the sheet and grab the first tab
