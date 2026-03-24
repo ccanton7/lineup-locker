@@ -54,8 +54,15 @@ if not df.empty:
     if search:
         df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)]
 
-    # --- THE UI GLOW UP ---
-    # Force the app to sort by PPV highest to lowest (if your column is named 'PPV')
+# --- THE UI GLOW UP ---
+    # 1. The "Shohei Tax" (Fixing Two-Way Players)
+    if 'POSITION(S)' in df.columns and 'PPV' in df.columns:
+        # Find players who are listed as Pitchers AND something else (like UT, OF, etc.)
+        two_way_mask = df['POSITION(S)'].astype(str).str.contains('P') & df['POSITION(S)'].astype(str).str.contains('UT|OF|1B|2B|3B|SS|C')
+        # Apply the 0.65 multiplier to their PPV
+        df.loc[two_way_mask, 'PPV'] = df.loc[two_way_mask, 'PPV'] * 0.65
+
+    # 2. Sort by True PPV
     if 'PPV' in df.columns:
         df = df.sort_values(by='PPV', ascending=False)
 
@@ -67,14 +74,14 @@ if not df.empty:
             df, 
             use_container_width=True, 
             height=600,
-            hide_index=True # Hides the ugly default numbers on the far left
+            hide_index=True 
         )
         
     with col2:
         st.metric("Total Tracked", len(df))
         
-        if 'PPV' in df.columns:
-            top_player = df.iloc[0]
-            st.success(f"📈 Top Value: {top_player[name_col]}")
-else:
+        # 3. Fix the Top Player Name display
+        if 'PPV' in df.columns and 'PLAYER' in df.columns:
+            top_player_name = df.iloc[0]['PLAYER']
+            st.success(f"📈 Top Value: {top_player_name}")else:
     st.warning("No data found. Ensure the bot email is shared on your Google Sheet!")
