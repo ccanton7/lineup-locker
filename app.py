@@ -83,5 +83,5 @@ if not df.empty:
         # 3. Fix the Top Player Name display
         if 'PPV' in df.columns and 'PLAYER' in df.columns:
             top_player_name = df.iloc[0]['PLAYER']
-            st.success(f"📈 Top Value: {top_player_name}")else:
+            st.success(f"📈 Top Value: {top_player_name}")
     st.warning("No data found. Ensure the bot email is shared on your Google Sheet!")
