@@ -5,7 +5,7 @@ from google.oauth2.service_account import Credentials
 import json
 
 # 1. Setup the Page
-st.set_page_config(page_title="Lineup Locker V2", layout="wide")
+st.set_page_config(page_title="Lineup Locker Database V2", layout="wide")
 st.title("⚾ Lineup Locker")
 st.subheader("Elite Dynasty Analytics")
 
