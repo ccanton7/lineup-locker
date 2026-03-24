@@ -23,13 +23,12 @@ def load_secure_data():
         ]
         
         # Authenticate using the Streamlit Cloud Vault
-        import json
         creds_dict = json.loads(st.secrets["gcp_service_account_json"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
         
-        # Open the sheet and grab the first tab
-        sheet = client.open_by_url(SHEET_URL).sheet1
+        # Open the sheet and grab the SPECIFIC tab we made for the app
+        sheet = client.open_by_url(SHEET_URL).worksheet("app_display")
         
         # Convert the Google Sheet data directly into a Pandas DataFrame
         data = sheet.get_all_records()
@@ -39,6 +38,7 @@ def load_secure_data():
     except Exception as e:
         st.error(f"Failed to connect to the vault: {e}")
         return pd.DataFrame()
+
 # 4. Load and Display Data
 with st.spinner("Connecting to the Lineup Locker Vault..."):
     df = load_secure_data()
@@ -48,24 +48,33 @@ if not df.empty:
     st.sidebar.header("Locker Search")
     search = st.sidebar.text_input("Find Player")
 
-    # Filter logic (Uses the first column, which should be the Player Name)
-    name_col = df.columns[0] 
+    # Filter logic (Uses 'Player' column if it exists, otherwise defaults to the first column)
+    name_col = 'Player' if 'Player' in df.columns else df.columns[0] 
     
     if search:
         df = df[df[name_col].astype(str).str.contains(search, case=False, na=False)]
+
+    # --- THE UI GLOW UP ---
+    # Force the app to sort by PPV highest to lowest (if your column is named 'PPV')
+    if 'PPV' in df.columns:
+        df = df.sort_values(by='PPV', ascending=False)
 
     # Display the Dashboard
     col1, col2 = st.columns([3, 1])
     
     with col1:
-        st.dataframe(df, use_container_width=True, height=600)
+        st.dataframe(
+            df, 
+            use_container_width=True, 
+            height=600,
+            hide_index=True # Hides the ugly default numbers on the far left
+        )
         
     with col2:
         st.metric("Total Tracked", len(df))
         
-        # If your PPV column is named 'PPV', it highlights the top scorer!
         if 'PPV' in df.columns:
-            top_player = df.sort_values(by='PPV', ascending=False).iloc[0]
+            top_player = df.iloc[0]
             st.success(f"📈 Top Value: {top_player[name_col]}")
 else:
     st.warning("No data found. Ensure the bot email is shared on your Google Sheet!")
