@@ -23,6 +23,7 @@ def load_secure_data():
         ]
         
         # Authenticate using the Streamlit Cloud Vault
+        import json
         creds_dict = json.loads(st.secrets["gcp_service_account_json"])
         creds = Credentials.from_service_account_info(creds_dict, scopes=scopes)
         client = gspread.authorize(creds)
@@ -38,7 +39,6 @@ def load_secure_data():
     except Exception as e:
         st.error(f"Failed to connect to the vault: {e}")
         return pd.DataFrame()
-
 # 4. Load and Display Data
 with st.spinner("Connecting to the Lineup Locker Vault..."):
     df = load_secure_data()
