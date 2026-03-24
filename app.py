@@ -10,7 +10,7 @@ st.title("⚾ Lineup Locker")
 st.subheader("Elite Dynasty Analytics")
 
 # 2. Your NEW Website V2 Google Sheet Link
-SHEET_URL = "https://docs.google.com/spreadsheets/d/1FWA7GxR6k2-5kci6TenmlFk3yJmjtP-Psy4OyQWTbYU/edit?usp=sharing"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1a7EzWVcudzFnbvTYnWk9nBgJNv5OKU8-ug3TgrFJqjE/edit?gid=0#gid=0"
 
 # 3. Secure Connection Protocol
 @st.cache_data(ttl=600)
