@@ -5,7 +5,7 @@ import requests
 st.set_page_config(page_title="Lineup Locker", layout="wide")
 st.title("⚾ Lineup Locker: PPV Engine")
 
-# --- 1. THE SIDEBAR (All 14 Categories) ---
+# --- 1. THE SIDEBAR (The Real 14 Categories) ---
 with st.sidebar:
     st.header("🏆 Fantrax Sync")
     league_id = st.text_input("League ID", placeholder="Enter ID...")
@@ -15,7 +15,8 @@ with st.sidebar:
     st.divider()
     
     st.header("⚙️ Scoring Settings")
-    # All 14 Categories from your screenshot
+    st.write("Defaulted to your 14 league categories:")
+    
     col1, col2 = st.columns(2)
     with col1:
         r_wt = st.number_input("R", value=1.0)
@@ -32,7 +33,7 @@ with st.sidebar:
         so_wt = st.number_input("SO", value=-0.5)
         gidp_wt = st.number_input("GIDP", value=-1.0)
         cyc_wt = st.number_input("CYC", value=5.0)
-        gs_wt = st.number_input("GS", value=4.0)
+        sf_wt = st.number_input("SF", value=1.0) # Swapped GS for SF
 
 # --- 2. DATA FETCH ---
 API_URL = "https://script.google.com/macros/s/AKfycbwcdITy_-UPkY4n8hEPER9hy-NMSH1Ky3kksEoubeeREiMcH13bThPVTWWsvudc15rHPg/exec"
@@ -47,26 +48,25 @@ def get_stats():
 
 df = get_stats()
 
-# --- 3. THE 14-STAT MATH ---
+# --- 3. THE 14-STAT MATH (Corrected) ---
 if not df.empty:
-    stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'GS']
+    # The 'SF' update in the list below
+    stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'SF']
     
-    # Check if all 14 exist in the sheet
     if all(col in df.columns for col in stat_cols):
         for col in stat_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # The Master Formula
+        # The Master Formula with SF
         df['Custom_Total'] = (
             (df['R'] * r_wt) + (df['1B'] * b1_wt) + (df['2B'] * b2_wt) + 
             (df['3B'] * b3_wt) + (df['HR'] * hr_wt) + (df['RBI'] * rbi_wt) + 
             (df['BB'] * bb_wt) + (df['HBP'] * hbp_wt) + (df['SB'] * sb_wt) + 
             (df['CS'] * cs_wt) + (df['SO'] * so_wt) + (df['GIDP'] * gidp_wt) + 
-            (df['CYC'] * cyc_wt) + (df['GS'] * gs_wt)
+            (df['CYC'] * cyc_wt) + (df['SF'] * sf_wt)
         )
         
-        # PPV Calculation (Custom Total / Denominator)
-        # Using 'Points' as the denominator to measure efficiency against current value
+        # PPV Calculation
         denom = 'Points' if 'Points' in df.columns else df.columns[0]
         df['Live_PPV'] = df['Custom_Total'] / pd.to_numeric(df[denom], errors='coerce')
         
@@ -82,4 +82,4 @@ if not df.empty:
         )
     else:
         missing = [c for c in stat_cols if c not in df.columns]
-        st.warning(f"Stat Warehouse Alert: Please add these 14 columns to your 'App Live' sheet: {missing}")
+        st.warning(f"Stat Warehouse Alert: Please add these columns to your 'App Live' sheet: {missing}")
