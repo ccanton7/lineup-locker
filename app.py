@@ -4,15 +4,8 @@ import requests
 
 st.set_page_config(page_title="Lineup Locker | PPV Engine", layout="wide")
 
-# --- CUSTOM CSS FOR THE 'NON-MISERABLE' LOOK ---
-st.markdown("""
-    <style>
-    .stApp { background-color: #0e1117; color: white; }
-    .stDataFrame { border: 1px solid #30363d; border-radius: 8px; }
-    </style>
-    """, unsafe_allow_html=True)
-
 st.title("⚾ Lineup Locker: PPV Engine")
+st.caption("Simplified Efficiency Rankings")
 
 # 1. THE SIDEBAR (Fantrax Sync)
 with st.sidebar:
@@ -20,7 +13,7 @@ with st.sidebar:
     st.write("Export your roster from Fantrax (CSV) and drop it here.")
     uploaded_file = st.file_uploader("Upload Roster", type=["csv"])
 
-# 2. DATA FETCH
+# 2. DATA FETCH (Google Sheets API)
 API_URL = "https://script.google.com/macros/s/AKfycbwcdITy_-UPkY4n8hEPER9hy-NMSH1Ky3kksEoubeeREiMcH13bThPVTWWsvudc15rHPg/exec"
 
 @st.cache_data(ttl=300)
@@ -35,38 +28,44 @@ engine_df = get_engine_data()
 
 if not engine_df.empty:
     # --- SMART COLUMN DETECTION ---
-    # Finds the name column (Player, Name, or First Col)
+    # Finds your new 'Rank' column
+    rank_col = next((c for c in engine_df.columns if 'rank' in c.lower()), None)
     name_col = next((c for c in engine_df.columns if c.lower() in ['player', 'name']), engine_df.columns[0])
-    # Finds the PPV column (PPV, or anything containing PPV)
     ppv_col = next((c for c in engine_df.columns if 'ppv' in c.lower()), None)
 
-    if ppv_col:
+    if ppv_col and rank_col:
         engine_df[ppv_col] = pd.to_numeric(engine_df[ppv_col], errors='coerce')
         
-        # 3. ROSTER MATCHING LOGIC
+        # Filter out the -100 noise
+        display_df = engine_df[engine_df[ppv_col] > -1].copy()
+
+        # 3. ROSTER MATCHING (If user uploads Fantrax CSV)
         if uploaded_file:
             user_roster = pd.read_csv(uploaded_file)
-            # Find the name column in the Fantrax CSV (usually 'Player')
             fan_name_col = next((c for c in user_roster.columns if 'player' in c.lower() or 'name' in c.lower()), user_roster.columns[0])
             
-            # Merge the two
-            merged = pd.merge(user_roster, engine_df, left_on=fan_name_col, right_on=name_col, how="inner")
+            # Merge to show only THEIR team's ranks
+            merged = pd.merge(user_roster, display_df, left_on=fan_name_col, right_on=name_col, how="inner")
             
-            st.subheader("✅ Your Team's Ranks")
-            st.dataframe(merged[[name_col, ppv_col]].sort_values(by=ppv_col, ascending=False), use_container_width=True, hide_index=True)
-            
-            avg_ppv = merged[ppv_col].mean()
-            st.metric("Team Average PPV", f"{avg_ppv:.3f}")
+            st.subheader("✅ Your Team's Efficiency")
+            # Only show the 3 columns they care about
+            st.dataframe(
+                merged[[rank_col, name_col, ppv_col]].sort_values(by=rank_col),
+                use_container_width=True, 
+                hide_index=True
+            )
         
         else:
-            # 4. GLOBAL LEADERBOARD (The Clean View)
-            st.subheader("Global Efficiency Leaderboard")
-            # Only show top players, clean up the view
-            clean_display = engine_df[engine_df[ppv_col] > -1][[name_col, ppv_col]].sort_values(by=ppv_col, ascending=False)
+            # 4. THE GLOBAL VIEW (Clean Table)
+            st.subheader("Global Leaderboard")
+            
+            # Slim it down to just the big 3
+            final_view = display_df[[rank_col, name_col, ppv_col]].sort_values(by=rank_col)
             
             st.dataframe(
-                clean_display,
+                final_view,
                 column_config={
+                    rank_col: st.column_config.NumberColumn("Rank", format="%d"),
                     name_col: "Player",
                     ppv_col: st.column_config.NumberColumn("PPV", format="%.3f")
                 },
@@ -74,6 +73,6 @@ if not engine_df.empty:
                 hide_index=True
             )
     else:
-        st.error(f"Couldn't find a 'PPV' column. I see these: {list(engine_df.columns)}")
+        st.error(f"Missing columns. I need Rank and PPV. Found: {list(engine_df.columns)}")
 else:
-    st.warning("Waiting for data from the Google Sheet...")
+    st.warning("Connecting to Google Sheets...")
