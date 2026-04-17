@@ -33,31 +33,26 @@ API_URL = "https://script.google.com/macros/s/AKfycbwcdITy_-UPkY4n8hEPER9hy-NMSH
 def get_data():
     try:
         r = requests.get(API_URL)
-        # This check prevents the JSONDecodeError crash
-        if r.status_code == 200 and "application/json" in r.headers.get("Content-Type", ""):
+        if r.status_code == 200:
             return pd.DataFrame(r.json())
-        else:
-            st.error(f"Google API Error: Check your 'Anyone' permissions in Apps Script. Status: {r.status_code}")
-            return pd.DataFrame()
-    except Exception as e:
-        st.error(f"Connection Error: {e}")
+        return pd.DataFrame()
+    except:
         return pd.DataFrame()
 
 df = get_data()
 
 # --- 3. THE LIVE MATH ---
 if not df.empty:
-    # 1. Clean up columns (Convert strings to numbers)
-    # The columns we need to do math on:
+    # Categories needed for calculation (Matching your all-caps headers)
     stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'SF']
     
-    # Check if headers match the sheet
+    # Check if headers exist in the sheet
     if all(col in df.columns for col in stat_cols):
         for col in stat_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # 2. DO THE MATH (Points = Stat * Weight)
-        df['Points'] = (
+        # 1. Calculate the Points (The Website's Output)
+        df['LIVE_POINTS'] = (
             (df['R'] * r_wt) + (df['1B'] * b1_wt) + (df['2B'] * b2_wt) + 
             (df['3B'] * b3_wt) + (df['HR'] * hr_wt) + (df['RBI'] * rbi_wt) + 
             (df['BB'] * bb_wt) + (df['HBP'] * hbp_wt) + (df['SB'] * sb_wt) + 
@@ -65,10 +60,16 @@ if not df.empty:
             (df['CYC'] * cyc_wt) + (df['SF'] * sf_wt)
         )
         
-        # 3. CALCULATE PPV (Points / ABs)
-        # Denominator is in Column D (ABs)
-        df['ABs'] = pd.to_numeric(df['ABs'], errors='coerce').replace(0, 1)
-        df['Live_PPV'] = df['Points'] / df['ABs']
+        # 2. Calculate PPV using AT-BATS as the denominator
+        # We use your 'AT-BATS' header exactly
+        df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
+        df['LIVE_PPV'] = df['LIVE_POINTS'] / df['AT-BATS']
         
-        # 4. RANK AND SORT
-        df = df.sort_values(by='Live_PPV', ascending=False
+        # 3. RANK AND SORT
+        df = df.sort_values(by='LIVE_PPV', ascending=False)
+        df['LIVE_RANK'] = range(1, len(df) + 1)
+
+        # 4. DISPLAY
+        st.subheader("Leaderboard: Efficiency by Custom Scoring")
+        st.dataframe(
+            df[['LIVE_RANK', 'PLAYER NAME', 'STATUS', 'LIVE_POINTS', 'LIVE
