@@ -5,7 +5,7 @@ import requests
 st.set_page_config(page_title="Lineup Locker", layout="wide")
 st.title("⚾ Lineup Locker: PPV Engine")
 
-# --- 1. SIDEBAR: THE SCORING WEIGHTS ---
+# --- 1. SIDEBAR: SCORING SETTINGS ---
 with st.sidebar:
     st.header("⚙️ Scoring Settings")
     c1, c2 = st.columns(2)
@@ -41,20 +41,54 @@ def get_data():
 
 df = get_data()
 
-# --- 3. THE LIVE MATH ---
+# --- 3. THE MATH ENGINE ---
 if not df.empty:
-    # Categories needed for calculation (Matching your App Live headers)
-    stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'SF']
+    # Categories to multiply by weights
+    weights = {
+        'R': r_wt, '1B': b1_wt, '2B': b2_wt, '3B': b3_wt, 'HR': hr_wt,
+        'RBI': rbi_wt, 'BB': bb_wt, 'HBP': hbp_wt, 'SB': sb_wt, 
+        'CS': cs_wt, 'SO': so_wt, 'GIDP': gidp_wt, 'CYC': cyc_wt, 'SF': sf_wt
+    }
     
-    if all(col in df.columns for col in stat_cols):
-        # Convert all stats to numeric
-        for col in stat_cols:
+    if all(col in df.columns for col in weights.keys()):
+        # Convert stats to numbers
+        for col in weights.keys():
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Calculate Points based on weights
-        df['LIVE_POINTS'] = (
-            (df['R'] * r_wt) + 
-            (df['1B'] * b1_wt) + 
-            (df['2B'] * b2_wt) + 
-            (df['3B'] * b3_wt) + 
-            (df['HR'] * hr_wt) +
+        # Calculate Points based on your specific weights
+        df['POINTS'] = 0.0
+        for col, wt in weights.items():
+            df['POINTS'] += (df[col] * wt)
+        
+        # Calculate PPV using AT-BATS denominator
+        if 'AT-BATS' in df.columns:
+            df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
+            df['PPV'] = df['POINTS'] / df['AT-BATS']
+            
+            # Sort by Efficiency and Rank them
+            df = df.sort_values(by='PPV', ascending=False)
+            df['RANK'] = range(1, len(df) + 1)
+
+            # --- 4. DISPLAY LEADERBOARD ---
+            st.subheader("Leaderboard: Efficiency by Custom Scoring")
+            
+            # Match your App Live header names exactly
+            show_cols = ['RANK', 'PLAYER NAME', 'STATUS', 'POINTS', 'PPV']
+            
+            st.dataframe(
+                df[show_cols],
+                column_config={
+                    "RANK": st.column_config.NumberColumn("Rank", format="#%d"),
+                    "POINTS": st.column_config.NumberColumn("Points", format="%.1f"),
+                    "PPV": st.column_config.NumberColumn("PPV", format="%.3f")
+                },
+                use_container_width=True, 
+                hide_index=True
+            )
+        else:
+            st.warning("Denominator Missing: 'AT-BATS' column not found in data.")
+    else:
+        missing = [c for c in weights.keys() if c not in df.columns]
+        st.warning(f"Stat Columns Missing: {missing}")
+else:
+    st.info("Awaiting data from the Stat Warehouse...")
