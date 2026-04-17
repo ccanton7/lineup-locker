@@ -5,9 +5,17 @@ import requests
 st.set_page_config(page_title="Lineup Locker", layout="wide")
 st.title("⚾ Lineup Locker: PPV Engine")
 
-# --- 1. SIDEBAR: SCORING SETTINGS ---
+# --- 1. SIDEBAR: SCORING & SYNC ---
 with st.sidebar:
-    st.header("⚙️ Scoring Settings")
+    st.header("🔗 League Sync")
+    # Hardcoded your specific League ID
+    league_id = st.text_input("Fantrax League ID", value="p4jlxofwmg5kgkd4")
+    
+    # Checkbox to toggle the filter
+    show_my_roster = st.checkbox("Show Only My Roster", value=False)
+    
+    st.divider()
+    st.header("⚙️ Scoring Weights")
     c1, c2 = st.columns(2)
     with c1:
         r_wt = st.number_input("R", value=1.0)
@@ -26,24 +34,42 @@ with st.sidebar:
         cyc_wt = st.number_input("CYC", value=5.0)
         sf_wt = st.number_input("SF", value=1.0)
 
-# --- 2. DATA FETCH ---
+# --- 2. DATA PIPELINE ---
 API_URL = "https://script.google.com/macros/s/AKfycbwcdITy_-UPkY4n8hEPER9hy-NMSH1Ky3kksEoubeeREiMcH13bThPVTWWsvudc15rHPg/exec"
 
 @st.cache_data(ttl=60)
-def get_data():
+def get_warehouse_data():
     try:
         r = requests.get(API_URL)
-        if r.status_code == 200:
-            return pd.DataFrame(r.json())
-        return pd.DataFrame()
+        return pd.DataFrame(r.json()) if r.status_code == 200 else pd.DataFrame()
     except:
         return pd.DataFrame()
 
-df = get_data()
+# NEW: Fantrax Roster Fetcher
+@st.cache_data(ttl=300)
+def get_fantrax_roster(l_id):
+    if not l_id: return []
+    try:
+        # Fantrax public roster endpoint
+        url = f"https://www.fantrax.com/fxea/general/getTeamRosters?leagueId={l_id}"
+        r = requests.get(url)
+        data = r.json()
+        
+        # This logic finds your players. 
+        # (Note: Fantrax data structures vary, we'll refine this once we see the 'Public' response)
+        roster_list = []
+        for teamId in data:
+            for player in data[teamId]['roster']:
+                roster_list.append(player['name'])
+        return roster_list
+    except:
+        return []
+
+df = get_warehouse_data()
+my_roster = get_fantrax_roster(league_id)
 
 # --- 3. THE MATH ENGINE ---
 if not df.empty:
-    # Categories to multiply by weights
     weights = {
         'R': r_wt, '1B': b1_wt, '2B': b2_wt, '3B': b3_wt, 'HR': hr_wt,
         'RBI': rbi_wt, 'BB': bb_wt, 'HBP': hbp_wt, 'SB': sb_wt, 
@@ -51,28 +77,28 @@ if not df.empty:
     }
     
     if all(col in df.columns for col in weights.keys()):
-        # Convert stats to numbers
         for col in weights.keys():
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Calculate Points based on your specific weights
-        df['POINTS'] = 0.0
-        for col, wt in weights.items():
-            df['POINTS'] += (df[col] * wt)
+        # POINTS calculation
+        df['POINTS'] = sum(df[col] * wt for col, wt in weights.items())
         
-        # Calculate PPV using AT-BATS denominator
+        # PPV calculation
         if 'AT-BATS' in df.columns:
             df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
             df['PPV'] = df['POINTS'] / df['AT-BATS']
             
-            # Sort by Efficiency and Rank them
+            # --- FILTER LOGIC ---
+            if show_my_roster and my_roster:
+                # Matches player names from your sheet against the Fantrax list
+                df = df[df['PLAYER NAME'].isin(my_roster)]
+            
+            # Rank and Sort
             df = df.sort_values(by='PPV', ascending=False)
             df['RANK'] = range(1, len(df) + 1)
 
-            # --- 4. DISPLAY LEADERBOARD ---
-            st.subheader("Leaderboard: Efficiency by Custom Scoring")
-            
-            # Match your App Live header names exactly
+            # --- 4. DISPLAY ---
+            st.subheader(f"Leaderboard: {'My Roster' if show_my_roster else 'All Players'}")
             show_cols = ['RANK', 'PLAYER NAME', 'STATUS', 'POINTS', 'PPV']
             
             st.dataframe(
@@ -86,9 +112,8 @@ if not df.empty:
                 hide_index=True
             )
         else:
-            st.warning("Denominator Missing: 'AT-BATS' column not found in data.")
+            st.warning("Ensure 'AT-BATS' is a header in 'App Live'.")
     else:
-        missing = [c for c in weights.keys() if c not in df.columns]
-        st.warning(f"Stat Columns Missing: {missing}")
+        st.warning(f"Missing Columns: {[c for c in weights.keys() if c not in df.columns]}")
 else:
-    st.info("Awaiting data from the Stat Warehouse...")
+    st.info("Warehouse connection pending...")
