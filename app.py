@@ -5,13 +5,11 @@ import requests
 st.set_page_config(page_title="Lineup Locker", layout="wide")
 st.title("⚾ Lineup Locker: PPV Engine")
 
-# --- 1. SIDEBAR: SCORING & SYNC ---
+# --- 1. SIDEBAR: USER INPUTS ---
 with st.sidebar:
-    st.header("🔗 League Sync")
-    # Hardcoded your specific League ID
-    league_id = st.text_input("Fantrax League ID", value="p4jlxofwmg5kgkd4")
-    
-    # Checkbox to toggle the filter
+    st.header("🔗 Fantrax Sync")
+    # You enter your ID here. I've left it blank/generic for you.
+    league_id = st.text_input("Enter League ID", placeholder="e.g. p4jlxofwmg5kgkd4")
     show_my_roster = st.checkbox("Show Only My Roster", value=False)
     
     st.divider()
@@ -34,7 +32,7 @@ with st.sidebar:
         cyc_wt = st.number_input("CYC", value=5.0)
         sf_wt = st.number_input("SF", value=1.0)
 
-# --- 2. DATA PIPELINE ---
+# --- 2. DATA FETCHING ---
 API_URL = "https://script.google.com/macros/s/AKfycbwcdITy_-UPkY4n8hEPER9hy-NMSH1Ky3kksEoubeeREiMcH13bThPVTWWsvudc15rHPg/exec"
 
 @st.cache_data(ttl=60)
@@ -45,28 +43,32 @@ def get_warehouse_data():
     except:
         return pd.DataFrame()
 
-# NEW: Fantrax Roster Fetcher
+# Robust Roster Fetcher
 @st.cache_data(ttl=300)
 def get_fantrax_roster(l_id):
     if not l_id: return []
     try:
-        # Fantrax public roster endpoint
         url = f"https://www.fantrax.com/fxea/general/getTeamRosters?leagueId={l_id}"
-        r = requests.get(url)
+        r = requests.get(url, timeout=5)
+        if r.status_code != 200: return []
         data = r.json()
         
-        # This logic finds your players. 
-        # (Note: Fantrax data structures vary, we'll refine this once we see the 'Public' response)
-        roster_list = []
-        for teamId in data:
-            for player in data[teamId]['roster']:
-                roster_list.append(player['name'])
-        return roster_list
+        roster_names = []
+        for team in data.values():
+            for player in team.get('roster', []):
+                # Fantrax uses "Last, First". We flip it to "First Last"
+                raw_name = player.get('name', '')
+                if ',' in raw_name:
+                    last, first = raw_name.split(',', 1)
+                    roster_names.append(f"{first.strip()} {last.strip()}".upper())
+                else:
+                    roster_names.append(raw_name.strip().upper())
+        return roster_names
     except:
         return []
 
 df = get_warehouse_data()
-my_roster = get_fantrax_roster(league_id)
+my_roster = get_fantrax_roster(league_id) if show_my_roster else []
 
 # --- 3. THE MATH ENGINE ---
 if not df.empty:
@@ -80,40 +82,14 @@ if not df.empty:
         for col in weights.keys():
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # POINTS calculation
+        # Calculate Points & PPV
         df['POINTS'] = sum(df[col] * wt for col, wt in weights.items())
         
-        # PPV calculation
         if 'AT-BATS' in df.columns:
             df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
             df['PPV'] = df['POINTS'] / df['AT-BATS']
             
-            # --- FILTER LOGIC ---
+            # --- FILTERING ---
             if show_my_roster and my_roster:
-                # Matches player names from your sheet against the Fantrax list
-                df = df[df['PLAYER NAME'].isin(my_roster)]
-            
-            # Rank and Sort
-            df = df.sort_values(by='PPV', ascending=False)
-            df['RANK'] = range(1, len(df) + 1)
-
-            # --- 4. DISPLAY ---
-            st.subheader(f"Leaderboard: {'My Roster' if show_my_roster else 'All Players'}")
-            show_cols = ['RANK', 'PLAYER NAME', 'STATUS', 'POINTS', 'PPV']
-            
-            st.dataframe(
-                df[show_cols],
-                column_config={
-                    "RANK": st.column_config.NumberColumn("Rank", format="#%d"),
-                    "POINTS": st.column_config.NumberColumn("Points", format="%.1f"),
-                    "PPV": st.column_config.NumberColumn("PPV", format="%.3f")
-                },
-                use_container_width=True, 
-                hide_index=True
-            )
-        else:
-            st.warning("Ensure 'AT-BATS' is a header in 'App Live'.")
-    else:
-        st.warning(f"Missing Columns: {[c for c in weights.keys() if c not in df.columns]}")
-else:
-    st.info("Warehouse connection pending...")
+                # Compare Uppercase for both to ensure a match
+                df = df[df['PLAYER NAME'].str
