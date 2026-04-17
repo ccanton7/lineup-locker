@@ -43,33 +43,13 @@ df = get_data()
 
 # --- 3. THE LIVE MATH ---
 if not df.empty:
-    # Categories needed for calculation (Matching your all-caps headers)
+    # 14 Categories (Must match your App Live headers exactly)
     stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'SF']
     
-    # Check if headers exist in the sheet
     if all(col in df.columns for col in stat_cols):
         for col in stat_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # 1. Calculate the Points (The Website's Output)
+        # Calculate Live Points
         df['LIVE_POINTS'] = (
-            (df['R'] * r_wt) + (df['1B'] * b1_wt) + (df['2B'] * b2_wt) + 
-            (df['3B'] * b3_wt) + (df['HR'] * hr_wt) + (df['RBI'] * rbi_wt) + 
-            (df['BB'] * bb_wt) + (df['HBP'] * hbp_wt) + (df['SB'] * sb_wt) + 
-            (df['CS'] * cs_wt) + (df['SO'] * so_wt) + (df['GIDP'] * gidp_wt) + 
-            (df['CYC'] * cyc_wt) + (df['SF'] * sf_wt)
-        )
-        
-        # 2. Calculate PPV using AT-BATS as the denominator
-        # We use your 'AT-BATS' header exactly
-        df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
-        df['LIVE_PPV'] = df['LIVE_POINTS'] / df['AT-BATS']
-        
-        # 3. RANK AND SORT
-        df = df.sort_values(by='LIVE_PPV', ascending=False)
-        df['LIVE_RANK'] = range(1, len(df) + 1)
-
-        # 4. DISPLAY
-        st.subheader("Leaderboard: Efficiency by Custom Scoring")
-        st.dataframe(
-            df[['LIVE_RANK', 'PLAYER NAME', 'STATUS', 'LIVE_POINTS', 'LIVE
+            (df['R'] * r_wt) + (df['1B'] * b1_wt) + (df['2B'] * b2
