@@ -43,13 +43,50 @@ df = get_data()
 
 # --- 3. THE LIVE MATH ---
 if not df.empty:
-    # 14 Categories (Must match your App Live headers exactly)
+    # Categories needed for calculation
     stat_cols = ['R', '1B', '2B', '3B', 'HR', 'RBI', 'BB', 'HBP', 'SB', 'CS', 'SO', 'GIDP', 'CYC', 'SF']
     
     if all(col in df.columns for col in stat_cols):
         for col in stat_cols:
             df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
         
-        # Calculate Live Points
+        # Calculate Points (Broken into lines so it doesn't clip)
         df['LIVE_POINTS'] = (
-            (df['R'] * r_wt) + (df['1B'] * b1_wt) + (df['2B'] * b2
+            (df['R'] * r_wt) + 
+            (df['1B'] * b1_wt) + 
+            (df['2B'] * b2_wt) + 
+            (df['3B'] * b3_wt) + 
+            (df['HR'] * hr_wt) + 
+            (df['RBI'] * rbi_wt) + 
+            (df['BB'] * bb_wt) + 
+            (df['HBP'] * hbp_wt) + 
+            (df['SB'] * sb_wt) + 
+            (df['CS'] * cs_wt) + 
+            (df['SO'] * so_wt) + 
+            (df['GIDP'] * gidp_wt) + 
+            (df['CYC'] * cyc_wt) + 
+            (df['SF'] * sf_wt)
+        )
+        
+        # Calculate PPV using AT-BATS as the denominator
+        df['AT-BATS'] = pd.to_numeric(df['AT-BATS'], errors='coerce').replace(0, 1)
+        df['LIVE_PPV'] = df['LIVE_POINTS'] / df['AT-BATS']
+        
+        # 4. RANK AND SORT
+        df = df.sort_values(by='LIVE_PPV', ascending=False)
+        df['LIVE_RANK'] = range(1, len(df) + 1)
+
+        # 5. DISPLAY
+        st.subheader("Leaderboard: Live PPV Efficiency")
+        cols_to_show = ['LIVE_RANK', 'PLAYER NAME', 'STATUS', 'LIVE_POINTS', 'LIVE_PPV']
+        st.dataframe(
+            df[cols_to_show],
+            column_config={
+                "LIVE_RANK": st.column_config.NumberColumn("Rank", format="#%d"),
+                "LIVE_POINTS": st.column_config.NumberColumn("Points", format="%.1f"),
+                "LIVE_PPV": st.column_config.NumberColumn("PPV", format="%.3f")
+            },
+            use_container_width=True, 
+            hide_index=True
+        )
+    else:
