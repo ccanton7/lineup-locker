@@ -15,7 +15,6 @@ league_id = st.text_input("Enter your Fantrax League ID:", value=default_league)
 
 @st.cache_data(ttl=3600)  # Caches the data for 1 hour so it loads instantly
 def load_league_data(id):
-    # This URL connects directly to the Fantrax public-facing tables
     url = f"https://www.fantrax.com/fxpa/req?t=106"
     payload = {
         "ms": "view", "pageNumber": 1, "maxResults": 1000, "view": "STATS",
@@ -32,7 +31,6 @@ def load_league_data(id):
             points = float(stats[0]) if len(stats) > 0 else 0.0
             ab = int(stats[1]) if len(stats) > 1 else 0
             
-            # Simple check for IL/Minors strings or short-names
             status = p.get('statusShortNames', 'FA')
             is_inactive = False
             if 'IL' in p.get('injuryStatus', '') or status in ['MINORS', 'IL']:
@@ -48,20 +46,16 @@ def load_league_data(id):
             })
         return pd.DataFrame(parsed)
     except:
-        st.error("Could not fetch data for this League ID. Check the ID or try again.")
         return pd.DataFrame()
 
 if league_id:
     raw_df = load_league_data(league_id)
     
     if not raw_df.empty:
-        # --- THE EXACT COOPER EQUATION ENGINE ---
-        # Note: In a production environment with rolling history, 
-        # 'Trend' would fetch from a history file. For this live display, 
-        # we calculate current baseline values.
+        # Calculate points per AB
         raw_df['Points_Per_AB'] = np.where(raw_df['AB'] > 0, raw_df['Points'] / raw_df['AB'], 0.0)
         
-        # Hardcoded trend placeholder to display layout until your history file syncs
+        # Trend baseline tracking placeholder
         raw_df['Trend'] = 0.0 
         
         # Exact Column F Conditions:
@@ -84,7 +78,7 @@ if league_id:
         # --- APP INTERFACE NAVIGATION ---
         tab1, tab2, tab3 = st.tabs(["📋 My Team", "🌎 All Players Leaderboard", "🔥 Waiver Wire / Unrostered"])
         
-        # Dynamically figure out what rosters exist in this league to populate a dropdown
+        # Filter down names for dropdown list
         teams_list = sorted([t for t in final_df['Status'].unique() if t not in ['FA', 'WAV']])
         
         with tab1:
@@ -92,17 +86,19 @@ if league_id:
             if my_team:
                 team_df = final_df[final_df['Status'] == my_team].copy()
                 team_df['Team Rank'] = range(1, len(team_df) + 1)
-                st.dataframe(team_df[['Team Rank', 'Player', 'Points', 'AB', 'PPV']], use_container_width=True)
+                st.dataframe(team_df[['Team Rank', 'Player', 'Points', 'AB', 'PPV']], use_container_width=True, hide_index=True)
                 
         with tab2:
             search_query = st.text_input("Search Player Name:")
             display_df = final_df.copy()
             if search_query:
                 display_df = display_df[display_df['Player'].str.contains(search_query, case=False)]
-            st.dataframe(display_df, use_container_width=True)
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
             
         with tab3:
             st.subheader("Available Free Agents Ranked by True Production Value")
             waiver_df = final_df[final_df['Status'].isin(['FA', 'WAV'])].reset_index(drop=True)
             waiver_df['Waiver Rank'] = waiver_df.index + 1
-            st.dataframe(waiver_df[['Waiver Rank', 'Player', 'Team', 'Points', 'AB', 'PPV']], use_container_width=True)
+            st.dataframe(waiver_df[['Waiver Rank', 'Player', 'Team', 'Points', 'AB', 'PPV']], use_container_width=True, hide_index=True)
+    else:
+        st.error("No data found or league data could not be parsed.")
